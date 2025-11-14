@@ -1,0 +1,23 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  sessionToken String?  @unique
+  wins         Int      @default(0)
+  answered     Int      @default(0)
+  bestTime     Int?     // Best response time in ms
+  lastActive   DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([wins])
+  @@index([sessionToken])
+}
