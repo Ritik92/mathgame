@@ -13,9 +13,9 @@ import {
 } from './lib/gameState';
 import type { ServerToClientEvents, ClientToServerEvents } from './types/socket';
 
-const dev = process.env.NODE_ENV !== 'production';
-const hostname = '0.0.0.0'; 
-const port = parseInt(process.env.PORT || '3000', 10);
+const dev = false;
+const hostname = '0.0.0.0';
+const port = parseInt(process.env.PORT || '8080', 10);
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
