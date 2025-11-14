@@ -79,7 +79,7 @@ app.prepare().then(() => {
 
     if (winner && actualWinner) {
       io.emit('winner', {
-        username: winner.username,
+        username: winner.username, //@ts-ignore
         answer: actualWinner.answer,
         question: gameState.currentQuestion!.question,
         responseTime: winner.responseTime,
