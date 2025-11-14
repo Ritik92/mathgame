@@ -9,14 +9,15 @@ import {
   getCurrentWinner,
   getLeaderboard,
   createUserSession,
-  restoreUserSession, 
+  restoreUserSession,
 } from './lib/gameState';
 import type { ServerToClientEvents, ClientToServerEvents } from './types/socket';
 
 const dev = process.env.NODE_ENV !== 'production';
+const hostname = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
 const port = parseInt(process.env.PORT || '3000', 10);
 
-const app = next({ dev });
+const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 interface CustomSocket extends Socket<ClientToServerEvents, ServerToClientEvents> {
@@ -36,12 +37,11 @@ app.prepare().then(() => {
   });
 
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
-    cors: {
-      origin: '*',
-      methods: ['GET', 'POST'],
-      credentials: true
-    },
-  });
+  cors: {
+    origin: '*', 
+    methods: ['GET', 'POST'],
+  },
+});
 
   const ANSWER_BUFFER_TIME = 100;
   let answerBuffer: Array<{
@@ -175,11 +175,7 @@ app.prepare().then(() => {
     process.exit(1);
   });
 
-  httpServer.listen(port, '0.0.0.0', () => {
-    console.log(`> Ready on http://0.0.0.0:${port}`);
-    console.log(`⚡ Network fairness: ${ANSWER_BUFFER_TIME}ms answer buffer`);
-    console.log(`📊 Database: Connected to Neon PostgreSQL`);
-    console.log(`🔐 Persistent sessions: Enabled`);
-    console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
+  httpServer.listen(port, () => {
+    console.log(`> Ready on http://localhost:${port}`);
   });
 });
