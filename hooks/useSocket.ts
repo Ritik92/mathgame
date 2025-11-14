@@ -17,12 +17,8 @@ export function useSocket(): TypedSocket | null {
     });
 
     socketInstance.on('connect', () => {
-      console.log('Connected to server');
-
-      // Try to restore session from localStorage
       const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
       if (sessionToken) {
-        console.log('🔐 Attempting to restore session...');
         socketInstance.emit('restoreSession', sessionToken);
       }
     });
@@ -37,12 +33,10 @@ export function useSocket(): TypedSocket | null {
   return socket;
 }
 
-// Helper to store session token
 export function storeSessionToken(token: string) {
   localStorage.setItem(SESSION_TOKEN_KEY, token);
 }
 
-// Helper to clear session token
 export function clearSessionToken() {
   localStorage.removeItem(SESSION_TOKEN_KEY);
 }

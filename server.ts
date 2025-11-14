@@ -30,7 +30,7 @@ app.prepare().then(() => {
       const parsedUrl = parse(req.url!, true);
       await handle(req, res, parsedUrl);
     } catch (err) {
-      console.error('Error occurred handling', req.url, err);
+      console.error('Error handling request:', req.url, err);
       res.statusCode = 500;
       res.end('internal server error');
     }
@@ -43,13 +43,6 @@ app.prepare().then(() => {
     },
   });
 
-  const broadcastStats = () => {
-    io.emit('stats', {
-      totalPlayers: io.engine.clientsCount,
-      lastWinner: gameState.lastWinner,
-    });
-  };
-
   const ANSWER_BUFFER_TIME = 100;
   let answerBuffer: Array<{
     socket: CustomSocket;
@@ -59,37 +52,45 @@ app.prepare().then(() => {
   }> = [];
   let bufferTimer: NodeJS.Timeout | null = null;
 
-  const processAnswerBuffer = () => {
+  const broadcastStats = () => {
+    io.emit('stats', {
+      totalPlayers: io.engine.clientsCount,
+      lastWinner: gameState.lastWinner,
+    });
+  };
+
+  const processAnswers = () => {
     if (answerBuffer.length === 0) return;
 
-    console.log(`Processing ${answerBuffer.length} buffered answers...`);
     answerBuffer.sort((a, b) => a.timestamp - b.timestamp);
 
-    let actualWinner: typeof answerBuffer[0] | null = null;
+    let winner: typeof answerBuffer[0] | null = null;
 
-    answerBuffer.forEach(({ socket, answer, username, timestamp }) => {
-      const result = checkAnswer(answer, username, timestamp);
-
+    for (const submission of answerBuffer) {
+      const result = checkAnswer(submission.answer, submission.username, submission.timestamp);
       if (result.correct && result.isWinner) {
-        actualWinner = { socket, answer, username, timestamp };
+        winner = submission;
+        break;
       }
-    });
+    }
 
-    const winner = getCurrentWinner();
+    const winnerData = getCurrentWinner();
 
-    if (winner && actualWinner) {
+    if (winnerData && winner) {
       io.emit('winner', {
-        username: winner.username, //@ts-ignore
-        answer: actualWinner.answer,
+        username: winnerData.username,
+        answer: winner.answer,
         question: gameState.currentQuestion!.question,
-        responseTime: winner.responseTime,
+        responseTime: winnerData.responseTime,
       });
 
       answerBuffer.forEach(({ socket, username }) => {
-        if (username !== winner.username) {
-          const submission = gameState.submissions.find((s) => s.username === username && s.correct);
+        if (username !== winnerData.username) {
+          const submission = gameState.submissions.find(
+            (s) => s.username === username && s.correct
+          );
           if (submission) {
-            socket.emit('tooLate', { winner: winner.username });
+            socket.emit('tooLate', { winner: winnerData.username });
           }
         }
       });
@@ -105,15 +106,12 @@ app.prepare().then(() => {
   };
 
   io.on('connection', (socket: CustomSocket) => {
-    console.log('User connected:', socket.id);
-
     if (gameState.currentQuestion) {
       socket.emit('question', gameState.currentQuestion);
     }
 
     broadcastStats();
 
-    // Handle session restoration
     socket.on('restoreSession', async (sessionToken: string) => {
       const session = await restoreUserSession(sessionToken);
       if (session) {
@@ -122,68 +120,51 @@ app.prepare().then(() => {
           username: session.username,
           stats: session.stats,
         });
-        console.log(`🔓 ${session.username} reconnected via session token`);
-      } else {
-        console.log('❌ Invalid session token');
       }
     });
 
     socket.on('setUsername', async (username: string) => {
       const cleanUsername = username.trim() || `User_${socket.id.slice(0, 6)}`;
       socket.username = cleanUsername;
-      
-      // Create session token
+
       const sessionToken = await createUserSession(cleanUsername);
       if (sessionToken) {
         socket.emit('sessionRestored', {
           username: cleanUsername,
           stats: { wins: 0, answered: 0, bestTime: null },
         });
-        
-        // Send token to client (client will store it)
+
         socket.emit('question', {
           ...gameState.currentQuestion!,
-          sessionToken, // Piggyback on question event
+          sessionToken,
         } as any);
       }
-      
-      console.log('Username set:', socket.username);
     });
 
     socket.on('submitAnswer', (answer: string) => {
-      const serverTimestamp = Date.now();
+      const timestamp = Date.now();
       const username = socket.username || `User_${socket.id.slice(0, 6)}`;
-
-      console.log(`🔥 Answer received from ${username} at ${serverTimestamp}`);
-
-      const parsedAnswer = parseFloat(answer);
-      const correct = Math.abs(parsedAnswer - gameState.correctAnswer) < 0.01;
+      const parsed = parseFloat(answer);
+      const correct = Math.abs(parsed - gameState.correctAnswer) < 0.01;
 
       if (!correct) {
         socket.emit('wrongAnswer');
         return;
       }
 
-      answerBuffer.push({
-        socket,
-        answer,
-        username,
-        timestamp: serverTimestamp,
-      });
+      answerBuffer.push({ socket, answer, username, timestamp });
 
       if (!bufferTimer) {
-        bufferTimer = setTimeout(processAnswerBuffer, ANSWER_BUFFER_TIME);
+        bufferTimer = setTimeout(processAnswers, ANSWER_BUFFER_TIME);
       }
     });
 
-    // Handle leaderboard request
     socket.on('getLeaderboard', async () => {
       const leaderboard = await getLeaderboard();
       socket.emit('leaderboard', leaderboard);
     });
 
     socket.on('disconnect', () => {
-      console.log('User disconnected:', socket.id);
       answerBuffer = answerBuffer.filter((item) => item.socket.id !== socket.id);
       broadcastStats();
     });
@@ -195,9 +176,6 @@ app.prepare().then(() => {
   });
 
   httpServer.listen(port, () => {
-    console.log(`> Ready on http://localhost:3000`);
-    console.log(`⚡ Network fairness: ${ANSWER_BUFFER_TIME}ms answer buffer`);
-    console.log(`📊 Database: Connected to Neon PostgreSQL`);
-    console.log(`🔐 Persistent sessions: Enabled`);
+    console.log(`> Ready on http://localhost:${port}`);
   });
 });
